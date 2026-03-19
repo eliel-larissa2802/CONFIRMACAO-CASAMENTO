@@ -1,285 +1,291 @@
-Você está desenvolvendo um site de casamento com sistema RSVP (confirmação de presença) com dois fluxos principais:
+🧾 PRODUCT REQUIREMENTS DOCUMENT (PRD v2)
+🟢 PROJECT NAME
 
-Convidados confirmam presença digitando seu nome
+Wedding RSVP System — Eliel & Larissa (v2 Enhanced)
 
-Administrador gerencia lista de convidados e confirmações
+🧩 OVERVIEW
 
-O sistema deve ser simples, elegante, rápido e responsivo, com foco em usabilidade.
+Este projeto consiste em um sistema completo de confirmação de presença (RSVP) para casamento, com interface moderna, responsiva e elegante.
 
-🎯 OBJECTIVE
+O sistema possui duas áreas principais:
 
-Construir uma aplicação web completa com:
+Área pública (convidado)
 
-Página pública de confirmação de presença
+Área administrativa (gestão completa)
 
-Painel administrativo com autenticação
+A aplicação é 100% client-side, utilizando localStorage como persistência.
 
-Persistência local de dados (sem backend)
+🎯 OBJECTIVES
 
-Interface moderna baseada em convite de casamento
+Facilitar confirmação de presença dos convidados
 
-🧱 TECH STACK (OBRIGATÓRIO)
+Permitir gestão eficiente da lista pelo administrador
 
-React 18
+Melhorar experiência com automação (importação de lista)
 
-TypeScript
+Manter design sofisticado e coerente com convite
 
-Vite
-
-Tailwind CSS
-
-LocalStorage (persistência)
-
-📁 PROJECT STRUCTURE
-
-Implemente exatamente esta estrutura:
-
-src/
-  assets/
-    logo-el.png
-
-  components/
-    NavLink.tsx
-    ui/ (button, card, dialog, input, etc.)
-
-  hooks/
-    use-mobile.tsx
-    use-toast.ts
-
-  lib/
-    guests.ts
-    utils.ts
-
-  pages/
-    Index.tsx
-    Admin.tsx
-    NotFound.tsx
-
-  App.tsx
-  main.tsx
-  index.css
-  App.css
-🎨 DESIGN SYSTEM
-Cores (usar CSS variables)
-
-background: bege claro (creme)
-
-foreground: marrom escuro
-
-primary: verde oliva
-
-accent: dourado suave
-
-destructive: vermelho
-
-success: verde
-
-olive-soft: verde oliva claro
-
-Tipografia
-
-Pinyon Script → títulos decorativos
-
-Cormorant Garamond → títulos elegantes
-
-Montserrat → texto padrão
-
-Estilo
-
-Elegante, minimalista, romântico
-
-Inspirado em convite de casamento
-
-Elementos florais sutis
-
-Bordas suaves e sombras leves
-
-Animações
-
-Fade-in suave (entrada de elementos)
-
-Hover em botões
-
-Transições leves
-
-🧠 DATA LAYER (CRÍTICO)
-
-Arquivo: src/lib/guests.ts
-
-LocalStorage keys:
-"wedding_guests"
-"wedding_confirmed"
-Funções obrigatórias:
-getGuests(): string[]
-getConfirmed(): string[]
-
-addGuest(name: string): boolean
-removeGuest(name: string): void
-updateGuest(oldName: string, newName: string): void
-
-confirmPresence(name: string): {
-  success: boolean
-  message: string
-}
-Regras de negócio:
-
-Comparação de nomes em lowercase
-
-Evitar duplicados
-
-Se não existir → erro
-
-Se já confirmado → aviso
-
-updateGuest mantém confirmação
-
-removeGuest remove também da confirmação
-
-👤 USER FLOWS
-🟢 CONVIDADO (ROTA "/")
-Interface:
-
-Logo E & L
-
-Nome do casal
-
-Data do casamento
-
-Input de nome
-
-Botão "Confirmar Presença"
-
-Fluxo:
+👥 USER ROLES
+Guest (Convidado)
 
 Digita nome
 
-Clica botão
+Confirma presença
+
+Pode voltar ao convite
+
+Pode acessar contato
+
+Admin (Administrador)
+
+Login
+
+Gerenciar convidados
+
+Importar lista em massa
+
+Configurar link de contato
+
+🔐 AUTHENTICATION
+
+Username: ELadmin
+
+Password: 30052026
+
+Autenticação client-side (sem backend)
+
+🧠 CORE FEATURES
+✅ RSVP SYSTEM (ATUALIZADO)
+Fluxo:
+
+Usuário digita nome
 
 Sistema valida
 
-Estados:
+Retorna:
 
-✅ Sucesso → "Presença confirmada com sucesso"
+Status	Ação
+Confirmado	Salva e exibe sucesso
+Já confirmado	Exibe aviso
+Não encontrado	Exibe erro
+🔘 BOTÃO "VOLTAR AO CONVITE" (NOVO)
 
-❌ Erro → "Nome não encontrado"
+Substituir:
 
-⚠️ Aviso → "Já confirmado"
+❌ "Site do casal"
+✅ "Voltar ao convite"
 
-Extras:
+Ação:
 
-Botão/link:
-→ Voltar ao convite
-→ https://elielelarissaconvite.my.canva.site/eliel-larissa-site
+Redirecionar para:
 
-🔐 ADMIN (ROTA "/admin")
-Autenticação
+https://elielelarissaconvite.my.canva.site/eliel-larissa-site
+📞 SISTEMA "FALE CONOSCO" (ATUALIZADO)
+Novo comportamento:
 
-Usuário: ELadmin
+O botão "Fale Conosco" será dinâmico
 
-Senha: 30052026
+O link será configurado pelo ADMIN
 
-Login simples via state
+Admin define:
 
-Sem backend
+Link do WhatsApp (ou qualquer URL)
 
-Dashboard
-1. Estatísticas
+Armazenamento:
+contact_link: string
+Comportamento:
 
-Total convidados
+Se existir → botão aparece
 
-Total confirmados
+Se não → botão oculto
 
-2. CRUD convidados
+🧑‍💼 ADMIN PANEL (UPGRADE)
+📥 IMPORTAÇÃO DE LISTA (NOVA FEATURE PRINCIPAL)
+Objetivo:
 
-Adicionar
+Permitir adicionar convidados em massa
 
-Editar (inline)
+📂 Tipos de arquivo suportados:
 
-Remover (com confirmação)
+.csv
 
-3. Tabela
+.txt
 
-Colunas:
+.xlsx (opcional se suportado)
 
-Nome
+📌 Regras:
 
-Status:
+Cada linha = 1 convidado
 
-Confirmado (verde)
+Ignorar duplicados automaticamente
 
-Pendente (cinza)
+Aplicar normalização (lowercase)
 
-Ações:
+📊 Fluxo:
+
+Admin clica em "Importar lista"
+
+Seleciona arquivo
+
+Sistema processa conteúdo
+
+Extrai nomes
+
+Adiciona automaticamente à lista
+
+Exibe resultado:
+
+Exemplo:
+
+50 nomes importados
+
+45 adicionados
+
+5 duplicados ignorados
+
+📦 Parsing esperado:
+CSV:
+João Silva
+Maria Souza
+Carlos Lima
+TXT:
+João Silva
+Maria Souza
+⚙️ Implementação esperada:
+
+Input type="file"
+
+FileReader API
+
+Parser simples (split por linha)
+
+Função reutilizável no guests.ts
+
+📋 ADMIN FEATURES (COMPLETO)
+Mantém:
+
+Adicionar manual
 
 Editar
 
 Remover
 
-🔁 ROUTING
-"/" → Index
-"/admin" → Admin
-"*" → NotFound
-📱 RESPONSIVIDADE
+Visualizar confirmados
 
-Mobile-first
+Adiciona:
 
-Layout adaptável
+Importação em massa
 
-Botões grandes (touch)
+Configuração do link de contato
 
-Tabela com scroll horizontal
+💾 DATA MODEL (ATUALIZADO)
+wedding_guests: string[]
+wedding_confirmed: string[]
+contact_link: string
+🧠 BUSINESS RULES (ATUALIZADAS)
+
+Adicionar:
+
+Importação ignora duplicatas
+
+Arquivos inválidos devem retornar erro amigável
+
+Nomes vazios devem ser ignorados
+
+Trim automático
+
+🎨 UI REQUIREMENTS (ATUALIZADO)
+Admin:
+
+Adicionar seção:
+
+📥 Importar Lista
+
+Botão upload
+
+Feedback visual
+
+Status da importação
+
+📞 Configurar Contato
+
+Input de URL
+
+Botão salvar
+
+Feedback de sucesso
+
+🔁 USER FLOW (ATUALIZADO)
+Guest:
+
+Acessa site
+
+Digita nome
+
+Confirma
+
+Vê feedback
+
+Pode:
+
+Voltar ao convite
+
+Falar com organizador (se configurado)
+
+Admin:
+
+Login
+
+Dashboard
+
+Pode:
+
+Adicionar manualmente
+
+Importar lista (NOVO)
+
+Editar/remover
+
+Configurar contato (NOVO)
 
 ⚠️ CONSTRAINTS
 
-NÃO usar backend
+Manter stack existente:
 
-NÃO usar bibliotecas pesadas extras
+React + TypeScript + Vite + Tailwind
 
-Código limpo e modular
+Não adicionar backend
 
-Separação clara de responsabilidades
+Código modular
 
-🚀 OUTPUT REQUIREMENTS
+Reutilizar guests.ts
 
-Você deve gerar:
+📦 EXPECTED OUTPUT
 
-Código completo de TODOS os arquivos
+A IA deve:
 
-Estrutura do projeto
+Atualizar código existente (não recriar do zero)
 
-Código pronto para rodar com:
+Implementar novas features:
 
-npm install
-npm run dev
+Importação de lista
 
-Comentários explicativos nas partes críticas
+Configuração de contato
 
-🎯 SUCCESS CRITERIA
+Botão atualizado
 
-O sistema deve:
+Manter design atual
 
-Validar nomes corretamente
+Garantir funcionamento completo
 
-Persistir dados no LocalStorage
+🚀 SUCCESS CRITERIA
 
-Permitir CRUD completo no admin
+Admin consegue importar lista com 1 clique
 
-Ser visualmente elegante e moderno
+Convidados são adicionados automaticamente
 
-Funcionar perfeitamente em mobile
+Botão "Voltar ao convite" funciona corretamente
 
-🧠 INSTRUÇÃO FINAL PARA A IA
+Link de contato é dinâmico
 
-Implemente o projeto completo seguindo rigorosamente este PRD.
-
-Evite simplificações.
-
-Priorize:
-
-Qualidade do código
-
-Organização
-
-Fidelidade ao design
-
-Experiência do usuário
+Nenhuma funcionalidade existente quebra
