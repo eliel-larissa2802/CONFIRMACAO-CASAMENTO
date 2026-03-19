@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react'
-import { confirmRSVP, getContactLink, type RSVPResult } from '../lib/guests'
+import { useState, useEffect, useRef } from 'react'
+import { confirmRSVP, getContactLink, searchGuests, type RSVPResult } from '../lib/guests'
 
 const INVITE_URL = 'https://elielelarissaconvite.my.canva.site/eliel-larissa-site'
 
@@ -14,9 +14,68 @@ export default function Index() {
   const [loading, setLoading] = useState(false)
   const [contactLink, setContactLink] = useState('')
 
+  const [suggestions, setSuggestions] = useState<string[]>([])
+  const [showSuggestions, setShowSuggestions] = useState(false)
+  const [activeIndex, setActiveIndex] = useState(-1)
+
+  const containerRef = useRef<HTMLDivElement>(null)
+
   useEffect(() => {
     setContactLink(getContactLink())
   }, [])
+
+  useEffect(() => {
+    const results = searchGuests(name)
+    setSuggestions(results)
+    setShowSuggestions(results.length > 0 && name.trim().length > 0)
+    setActiveIndex(-1)
+  }, [name])
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setShowSuggestions(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  function selectSuggestion(suggestion: string) {
+    setName(suggestion)
+    setShowSuggestions(false)
+    setFeedback({ type: null, message: '' })
+  }
+
+  function handleInputChange(e: React.ChangeEvent<HTMLInputElement>) {
+    setFeedback({ type: null, message: '' })
+    setName(e.target.value)
+  }
+
+  function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (showSuggestions) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault()
+        setActiveIndex(i => Math.min(i + 1, suggestions.length - 1))
+        return
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault()
+        setActiveIndex(i => Math.max(i - 1, -1))
+        return
+      }
+      if (e.key === 'Enter' && activeIndex >= 0) {
+        e.preventDefault()
+        selectSuggestion(suggestions[activeIndex])
+        return
+      }
+      if (e.key === 'Escape') {
+        setShowSuggestions(false)
+        return
+      }
+    }
+    if (e.key === 'Enter') handleConfirm()
+  }
 
   function handleConfirm() {
     if (!name.trim()) {
@@ -24,6 +83,7 @@ export default function Index() {
       return
     }
 
+    setShowSuggestions(false)
     setLoading(true)
     setTimeout(() => {
       const result: RSVPResult = confirmRSVP(name)
@@ -116,15 +176,43 @@ export default function Index() {
               Digite seu nome exatamente como foi convidado
             </p>
 
-            <input
-              type="text"
-              className="input-field mb-4"
-              placeholder="Seu nome completo"
-              value={name}
-              onChange={e => { setFeedback({ type: null, message: '' }); setName(e.target.value) }}
-              onKeyDown={e => e.key === 'Enter' && handleConfirm()}
-              disabled={loading}
-            />
+            {/* Input with autocomplete */}
+            <div ref={containerRef} className="relative mb-4">
+              <input
+                type="text"
+                className="input-field"
+                placeholder="Seu nome completo"
+                value={name}
+                onChange={handleInputChange}
+                onKeyDown={handleKeyDown}
+                onFocus={() => suggestions.length > 0 && name.trim() && setShowSuggestions(true)}
+                disabled={loading}
+                autoComplete="off"
+                aria-autocomplete="list"
+                aria-expanded={showSuggestions}
+              />
+
+              {showSuggestions && (
+                <ul className="absolute z-10 left-0 right-0 top-full mt-1 bg-white border border-olive-200 rounded-2xl shadow-lg overflow-hidden fade-in">
+                  {suggestions.map((s, i) => (
+                    <li
+                      key={s}
+                      onMouseDown={() => selectSuggestion(s)}
+                      className={`px-5 py-3 text-sm cursor-pointer transition-colors flex items-center gap-2 ${
+                        i === activeIndex
+                          ? 'bg-olive-700 text-white'
+                          : 'text-stone-700 hover:bg-olive-50'
+                      } ${i < suggestions.length - 1 ? 'border-b border-olive-50' : ''}`}
+                    >
+                      <span className={`text-xs ${i === activeIndex ? 'text-olive-200' : 'text-olive-400'}`}>
+                        ✦
+                      </span>
+                      {s}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
 
             {feedback.type && (
               <div className={`rounded-xl px-4 py-3 text-sm mb-4 text-center fade-in ${feedbackClasses[feedback.type]}`}>

@@ -95,6 +95,14 @@ export type ImportResult = {
   duplicates: number
 }
 
+export function searchGuests(query: string, limit = 5): string[] {
+  const q = normalize(query)
+  if (!q) return []
+  return getGuests()
+    .filter(g => normalize(g).startsWith(q))
+    .slice(0, limit)
+}
+
 export function importGuests(raw: string): ImportResult {
   const lines = raw.split(/\r?\n/)
   const guests = getGuests()
