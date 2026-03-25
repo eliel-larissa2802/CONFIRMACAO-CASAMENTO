@@ -1,6 +1,6 @@
 # Documentação — Wedding RSVP System · Eliel & Larissa
 
-> Versão atual: **v2 Enhanced** · Atualizado em: 19/03/2026
+> Versão atual: **v3 Supabase** · Atualizado em: 25/03/2026
 
 ---
 
@@ -11,19 +11,20 @@
 3. [Estrutura de Pastas](#3-estrutura-de-pastas)
 4. [Como Executar](#4-como-executar)
 5. [Arquitetura e Fluxo de Dados](#5-arquitetura-e-fluxo-de-dados)
-6. [Módulo de Dados — `lib/guests.ts`](#6-módulo-de-dados--libgueststs)
-7. [Página Pública — RSVP (`Index.tsx`)](#7-página-pública--rsvp-indextsx)
-8. [Painel Administrativo (`Admin.tsx`)](#8-painel-administrativo-admintsx)
-9. [Sistema de Design](#9-sistema-de-design)
-10. [Persistência de Dados (localStorage)](#10-persistência-de-dados-localstorage)
-11. [Autenticação](#11-autenticação)
-12. [Regras de Negócio](#12-regras-de-negócio)
-13. [Responsividade](#13-responsividade)
-14. [Configurações do Projeto](#14-configurações-do-projeto)
-15. [Scripts Disponíveis](#15-scripts-disponíveis)
-16. [Limitações Conhecidas](#16-limitações-conhecidas)
-17. [Melhorias Futuras](#17-melhorias-futuras)
-18. [Histórico de Versões](#18-histórico-de-versões)
+6. [Configuração do Supabase](#6-configuração-do-supabase)
+7. [Módulo de Dados — `lib/guests.ts`](#7-módulo-de-dados--libgueststs)
+8. [Página Pública — RSVP (`Index.tsx`)](#8-página-pública--rsvp-indextsx)
+9. [Painel Administrativo (`Admin.tsx`)](#9-painel-administrativo-admintsx)
+10. [Sistema de Design](#10-sistema-de-design)
+11. [Persistência de Dados (Supabase)](#11-persistência-de-dados-supabase)
+12. [Autenticação](#12-autenticação)
+13. [Regras de Negócio](#13-regras-de-negócio)
+14. [Responsividade](#14-responsividade)
+15. [Configurações do Projeto](#15-configurações-do-projeto)
+16. [Scripts Disponíveis](#16-scripts-disponíveis)
+17. [Limitações Conhecidas](#17-limitações-conhecidas)
+18. [Melhorias Futuras](#18-melhorias-futuras)
+19. [Histórico de Versões](#19-histórico-de-versões)
 
 ---
 
@@ -38,7 +39,7 @@ O sistema é composto por duas áreas principais:
 | Pública | `/` | Convidados confirmam presença digitando o nome |
 | Administrativa | `/admin` | Gerenciamento completo da lista de convidados |
 
-O projeto **não possui backend**. Todos os dados são armazenados no `localStorage` do navegador, tornando a solução 100% estática e sem dependências externas de servidor.
+O projeto utiliza **Supabase** como backend para persistência de dados, permitindo sincronização em tempo real e acesso multi-dispositivo. A aplicação é uma SPA (Single Page Application) construída com React e TypeScript.
 
 ---
 
@@ -51,6 +52,8 @@ O projeto **não possui backend**. Todos os dados são armazenados no `localStor
 | Vite | 5.3.1 | Build tool e servidor de desenvolvimento |
 | Tailwind CSS | 3.4.4 | Estilização utilitária |
 | React Router DOM | 6.26.0 | Roteamento entre páginas |
+| @supabase/supabase-js | 2.100.0 | Cliente para banco de dados Supabase |
+| Supabase | — | Backend como serviço (PostgreSQL + Auth) |
 | Google Fonts | — | Tipografia (Great Vibes, Playfair Display, Inter) |
 
 ---
@@ -64,6 +67,7 @@ CONFIRMAÇÃO DE PRESENÇA/
 │   └── monogram.png        # Monograma EL dourado (favicon + logo)
 ├── src/
 │   ├── lib/
+│   │   ├── supabase.ts     # Configuração e cliente Supabase
 │   │   └── guests.ts       # Toda a lógica de dados (CRUD + RSVP + importação + contato)
 │   ├── pages/
 │   │   ├── Index.tsx       # Página pública de confirmação
@@ -71,6 +75,7 @@ CONFIRMAÇÃO DE PRESENÇA/
 │   ├── App.tsx             # Roteador principal
 │   ├── main.tsx            # Ponto de entrada React
 │   └── index.css           # Estilos globais + Tailwind
+├── .env                    # Variáveis de ambiente (local)
 ├── index.html              # Template HTML principal
 ├── package.json
 ├── vite.config.ts
@@ -78,6 +83,7 @@ CONFIRMAÇÃO DE PRESENÇA/
 ├── postcss.config.js
 ├── tsconfig.json
 ├── tsconfig.node.json
+├── vercel.json             # Configuração para deploy no Vercel
 └── DOCUMENTACAO.md         # Este arquivo
 ```
 
@@ -138,43 +144,97 @@ npm run preview
 │                │  + ContactLink  │                   │
 │                └───────┬────────┘                   │
 │                        │                             │
+│                ┌───────▼────────┐                   │
+│                │ lib/supabase.ts │                   │
+│                │   Supabase      │                   │
+│                │    Client       │                   │
+│                └───────┬────────┘                   │
+│                        │                             │
 └────────────────────────┼─────────────────────────────┘
                          │
           ┌──────────────▼──────────────┐
-          │         localStorage        │
-          │   wedding_guests: string[]  │
-          │   wedding_confirmed: string[]│
-          │   contact_link: string      │
+          │          Supabase           │
+          │   PostgreSQL Database       │
+          │   Tables: guests, settings  │
           └─────────────────────────────┘
 ```
 
 ---
 
-## 6. Módulo de Dados — `lib/guests.ts`
+## 6. Configuração do Supabase
 
-Centraliza toda a lógica de acesso e manipulação de dados.
+### Inicialização do Cliente
 
-### Constantes (chaves do localStorage)
+O cliente Supabase é configurado em `src/lib/supabase.ts`:
+
+```typescript
+import { createClient } from '@supabase/supabase-js'
+
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY
+
+if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+  console.warn('⚠️ Supabase env vars não configuradas!')
+}
+
+export const supabase = createClient(
+  SUPABASE_URL as string,
+  SUPABASE_ANON_KEY as string
+)
+```
+
+### Variáveis de Ambiente
+
+**Arquivo `.env` (local):**
+```
+VITE_SUPABASE_URL=https://fsyntprccyocvxsukjxz.supabase.co
+VITE_SUPABASE_ANON_KEY=COLE_SUA_CHAVE_AQUI
+```
+
+**Em produção (Vercel):** Configure as variáveis `VITE_SUPABASE_URL` e `VITE_SUPABASE_ANON_KEY` no painel do Vercel.
+
+### Esquema do Banco
+
+**Tabela `guests`:**
+- `id` (uuid, primary key)
+- `name` (text)
+- `confirmed` (boolean, default false)
+
+**Tabela `settings`:**
+- `key` (text, primary key)
+- `value` (text)
+
+---
+
+## 7. Módulo de Dados — `lib/guests.ts`
+
+Centraliza toda a lógica de acesso e manipulação de dados via Supabase.
+
+### Tipos
 
 ```ts
-GUESTS_KEY    = 'wedding_guests'
-CONFIRMED_KEY = 'wedding_confirmed'
-CONTACT_KEY   = 'contact_link'
+export type GuestRow = {
+  id: string
+  name: string
+  confirmed: boolean
+}
+
+export type RSVPResult = 'confirmed' | 'already_confirmed' | 'not_found'
+
+export type ImportResult = {
+  total: number
+  added: number
+  duplicates: number
+}
+```
+
+### Constantes
+
+```ts
+const CONTACT_KEY = 'contact_link'
 ```
 
 ### Funções Exportadas
-
-#### `getGuests(): string[]`
-Retorna a lista completa de convidados cadastrados.
-
-#### `setGuests(guests: string[]): void`
-Persiste a lista de convidados no localStorage.
-
-#### `getConfirmed(): string[]`
-Retorna a lista de convidados que confirmaram presença.
-
-#### `setConfirmed(confirmed: string[]): void`
-Persiste a lista de confirmados no localStorage.
 
 #### `normalize(name: string): string`
 Converte o nome para lowercase e remove espaços extras. Usada em todas as comparações para garantir case-insensitivity.
@@ -184,8 +244,11 @@ normalize("João Silva") // → "joão silva"
 normalize("  MARIA  ") // → "maria"
 ```
 
-#### `confirmRSVP(name: string): RSVPResult`
-Fluxo principal de confirmação de presença.
+#### `getGuests(): Promise<GuestRow[]>`
+Retorna a lista completa de convidados cadastrados do Supabase, ordenada por nome.
+
+#### `confirmRSVP(name: string): Promise<RSVPResult>`
+Fluxo principal de confirmação de presença via busca case-insensitive no Supabase.
 
 | Resultado | Condição |
 |---|---|
@@ -193,25 +256,20 @@ Fluxo principal de confirmação de presença.
 | `'already_confirmed'` | Nome existe e já havia confirmado |
 | `'not_found'` | Nome não encontrado na lista |
 
-#### `addGuest(name: string): boolean`
-Adiciona um novo convidado manualmente. Retorna `false` se já existir (case-insensitive).
+#### `addGuest(name: string): Promise<boolean>`
+Adiciona um novo convidado no Supabase. Retorna `false` se já existir (case-insensitive).
 
-#### `editGuest(oldName: string, newName: string): boolean`
-Edita o nome de um convidado, mantendo seu status de confirmação. Retorna `false` se o novo nome já existir.
+#### `editGuest(oldName: string, newName: string): Promise<boolean>`
+Edita o nome de um convidado no Supabase, mantendo seu status de confirmação. Retorna `false` se o novo nome já existir.
 
-#### `removeGuest(name: string): void`
-Remove o convidado da lista principal **e** da lista de confirmados simultaneamente.
+#### `removeGuest(id: string): Promise<void>`
+Remove o convidado do Supabase pelo ID.
 
-#### `getContactLink(): string` *(v2)*
-Retorna o link de contato configurado pelo admin. Retorna string vazia se não configurado.
+#### `searchGuests(query: string, limit?: number): Promise<string[]>`
+Busca convidados no Supabase por prefixo, retornando até `limit` nomes (padrão 5).
 
-#### `setContactLink(url: string): void` *(v2)*
-Salva o link de contato no localStorage. Aplica `trim()` automaticamente.
-
-#### `importGuests(raw: string): ImportResult` *(v2)*
-Processa o conteúdo bruto de um arquivo (`.csv` ou `.txt`) e adiciona os convidados em massa.
-
-**Parâmetro:** string com o conteúdo completo do arquivo
+#### `importGuests(raw: string): Promise<ImportResult>`
+Processa conteúdo de arquivo (CSV/txt) e adiciona convidados em massa no Supabase.
 
 **Retorno — tipo `ImportResult`:**
 
@@ -222,6 +280,15 @@ type ImportResult = {
   duplicates: number // linhas ignoradas por já existirem
 }
 ```
+
+#### `getContactLink(): Promise<string>`
+Retorna o link de contato da tabela `settings` no Supabase.
+
+#### `setContactLink(url: string): Promise<void>`
+Salva o link de contato na tabela `settings` no Supabase via upsert.
+
+#### `importGuests(raw: string): Promise<ImportResult>`
+Processa conteúdo de arquivo (CSV/txt) e adiciona convidados em massa no Supabase.
 
 **Comportamento interno:**
 - Divide o conteúdo por `\n` ou `\r\n`
@@ -267,7 +334,7 @@ type ImportResult = {
 | `name` | `string` | Valor do campo de nome |
 | `feedback` | `FeedbackState` | Tipo e mensagem do feedback |
 | `loading` | `boolean` | Controle de carregamento durante verificação |
-| `contactLink` | `string` | Link de contato lido do localStorage no mount |
+| `contactLink` | `string` | Link de contato lido do Supabase no mount |
 
 ### Feedback Visual
 
@@ -349,12 +416,12 @@ Importação concluída!
 - Arquivo vazio
 - Erro de leitura do FileReader
 
-#### Configurar Contato *(v2)*
+#### Configurar Contato
 
 Permite ao admin definir dinamicamente o link exibido no botão "Fale Conosco" da página pública.
 
 - Input aceita qualquer URL (WhatsApp, Instagram, site etc.)
-- Salvar persiste no `localStorage` sob a chave `contact_link`
+- Salvar persiste na tabela `settings` do Supabase
 - Deixar o campo vazio e salvar oculta o botão na página pública
 - Feedback "Link de contato salvo com sucesso." confirmado por 2,5 segundos
 
@@ -389,10 +456,13 @@ https://wa.me/5511999999999
 | Estado | Tipo | Descrição |
 |---|---|---|
 | `view` | `'login' \| 'dashboard'` | Tela atual |
-| `guests` | `string[]` | Lista de convidados |
-| `confirmed` | `string[]` | Lista de confirmados |
-| `editingName` | `string \| null` | Nome sendo editado |
-| `removeConfirm` | `string \| null` | Nome aguardando remoção |
+| `guests` | `GuestRow[]` | Lista de convidados do Supabase |
+| `confirmed` | `string[]` | Lista de confirmados (calculada) |
+| `editingId` | `string \| null` | ID do convidado sendo editado |
+| `editingOriginalName` | `string` | Nome original do convidado sendo editado |
+| `editValue` | `string` | Novo valor do nome em edição |
+| `editError` | `string` | Mensagem de erro na edição |
+| `removeConfirm` | `GuestRow \| null` | Convidado aguardando remoção |
 | `filterText` | `string` | Texto do filtro de busca |
 | `filterStatus` | `'all' \| 'confirmed' \| 'pending'` | Filtro de status |
 | `contactInput` | `string` | Valor do input de configuração de contato |
@@ -444,32 +514,35 @@ https://wa.me/5511999999999
 
 ---
 
-## 10. Persistência de Dados (localStorage)
+## 10. Persistência de Dados (Supabase)
 
-| Chave | Tipo | Conteúdo |
-|---|---|---|
-| `wedding_guests` | `string` (JSON) | Array com nomes de todos os convidados |
-| `wedding_confirmed` | `string` (JSON) | Array com nomes dos que confirmaram |
-| `contact_link` | `string` | URL do botão "Fale Conosco" (v2) |
+Os dados são armazenados no Supabase (PostgreSQL), permitindo sincronização em tempo real e acesso multi-dispositivo.
 
-### Exemplo de dados no localStorage
+### Tabelas
 
-```json
-// wedding_guests
-["João Silva", "Maria Oliveira", "Carlos Souza", "Ana Lima"]
+**`guests`:**
+```sql
+CREATE TABLE guests (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  name TEXT NOT NULL,
+  confirmed BOOLEAN DEFAULT FALSE
+);
+```
 
-// wedding_confirmed
-["João Silva", "Ana Lima"]
-
-// contact_link
-"https://wa.me/5511999999999"
+**`settings`:**
+```sql
+CREATE TABLE settings (
+  key TEXT PRIMARY KEY,
+  value TEXT
+);
 ```
 
 ### Comportamento
 
-- Os dados **persistem** entre sessões no mesmo navegador
-- Os dados são **locais** — não sincronizados entre dispositivos
-- Limpar os dados: DevTools → Application → Storage → Clear site data
+- Os dados **persistem** na nuvem e são acessíveis de qualquer dispositivo
+- Sincronização em tempo real entre usuários
+- Segurança via Row Level Security (RLS) no Supabase
+- Backup automático pelo Supabase
 
 ---
 
@@ -549,12 +622,12 @@ Configuração padrão do Vite com plugin React para suporte a JSX/TSX.
 
 | Limitação | Descrição |
 |---|---|
-| Dados locais | O localStorage não sincroniza entre dispositivos ou navegadores diferentes |
+| Dependência de internet | Requer conexão para acessar dados do Supabase |
 | Segurança | As credenciais do admin ficam no código-fonte (client-side) |
 | Importação `.xlsx` | Arquivos Excel não são suportados; use `.csv` ou `.txt` |
 | Sem exportação | Não há como exportar a lista em CSV ou PDF pelo painel |
 | Sem notificações | Nenhum e-mail ou mensagem é enviado ao confirmar presença |
-| Perda de dados | Limpar o cache do navegador apaga todos os dados |
+| Rate limiting | Supabase pode limitar requests em projetos gratuitos |
 
 ---
 
@@ -562,7 +635,7 @@ Configuração padrão do Vite com plugin React para suporte a JSX/TSX.
 
 | Melhoria | Descrição |
 |---|---|
-| Backend (Firebase) | Persistência em nuvem com sincronização em tempo real |
+| Backend (Firebase) | Persistência em nuvem com sincronização em tempo real | → **Implementado com Supabase** |
 | Importação `.xlsx` | Suporte a arquivos Excel via biblioteca `xlsx` |
 | Exportação CSV | Baixar lista de convidados/confirmados em planilha |
 | Busca avançada | Filtro por inicial, família, mesa etc. |
@@ -575,6 +648,24 @@ Configuração padrão do Vite com plugin React para suporte a JSX/TSX.
 ---
 
 ## 18. Histórico de Versões
+
+### v3 Supabase — 25/03/2026
+
+**Mudanças principais:**
+- Migração completa de localStorage para Supabase
+- Dados agora persistem na nuvem com sincronização em tempo real
+- Adicionado `lib/supabase.ts` para configuração do cliente
+- Reescrever `lib/guests.ts` para usar queries do Supabase
+- Atualização de tipos: `GuestRow[]` em vez de `string[]`
+- Configuração de variáveis de ambiente para produção (Vercel)
+
+**Alterações técnicas:**
+- Funções agora assíncronas com Promises
+- Remoção de constantes de localStorage
+- Adição de tabelas `guests` e `settings` no Supabase
+- Persistência do link de contato na tabela `settings`
+
+---
 
 ### v2 Enhanced — 19/03/2026
 
@@ -600,4 +691,4 @@ Configuração padrão do Vite com plugin React para suporte a JSX/TSX.
 
 ---
 
-*Wedding RSVP System — Eliel & Larissa · v2 Enhanced*
+*Wedding RSVP System — Eliel & Larissa · v3 Supabase*

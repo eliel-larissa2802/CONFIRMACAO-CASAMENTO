@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
+import * as XLSX from 'xlsx'
 import {
   getGuests,
   addGuest,
@@ -176,8 +177,8 @@ export default function Admin() {
     if (!file) return
 
     const ext = file.name.split('.').pop()?.toLowerCase()
-    if (!['csv', 'txt'].includes(ext ?? '')) {
-      setImportError('Formato inválido. Use arquivos .csv ou .txt')
+    if (!['csv', 'txt', 'xlsx'].includes(ext ?? '')) {
+      setImportError('Formato inválido. Use arquivos .xlsx, .csv ou .txt')
       if (fileInputRef.current) fileInputRef.current.value = ''
       return
     }
@@ -188,7 +189,29 @@ export default function Admin() {
 
     const reader = new FileReader()
     reader.onload = async (ev) => {
-      const text = ev.target?.result as string
+      let text: string
+      if (ext === 'xlsx') {
+        const data = ev.target?.result as ArrayBuffer
+        const workbook = XLSX.read(data, { type: 'array' })
+        const firstSheetName = workbook.SheetNames[0]
+        if (!firstSheetName) {
+          setImportError('Arquivo Excel sem planilha válida.')
+          setImporting(false)
+          return
+        }
+        const sheet = workbook.Sheets[firstSheetName]
+        text = XLSX.utils.sheet_to_csv(sheet, { blankrows: false })
+        // Pular cabeçalho se detectar "nome"
+        const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean)
+        if (lines.length > 0 && lines[0].toLowerCase().includes('nome')) {
+          text = lines.slice(1).join('\n')
+        } else {
+          text = lines.join('\n')
+        }
+      } else {
+        text = ev.target?.result as string
+      }
+
       if (!text?.trim()) {
         setImportError('O arquivo está vazio.')
         setImporting(false)
@@ -209,7 +232,12 @@ export default function Admin() {
       setImportError('Erro ao ler o arquivo. Tente novamente.')
       setImporting(false)
     }
-    reader.readAsText(file, 'UTF-8')
+
+    if (ext === 'xlsx') {
+      reader.readAsArrayBuffer(file)
+    } else {
+      reader.readAsText(file, 'UTF-8')
+    }
   }
 
   const totalConfirmed = guests.filter(g => g.confirmed).length
@@ -323,12 +351,12 @@ export default function Admin() {
         <div className="card fade-in-up delay-200">
           <h2 className="font-serif font-semibold text-olive-800 text-lg mb-1">Importar Lista</h2>
           <p className="text-stone-400 text-xs mb-4">
-            Suporta <strong>.csv</strong> ou <strong>.txt</strong> com um nome por linha
+            Suporta <strong>.xlsx</strong>, <strong>.csv</strong> ou <strong>.txt</strong> com um nome por linha
           </p>
           <div className="flex items-center gap-3 flex-wrap">
             <label className={`btn-primary cursor-pointer text-sm ${importing ? 'opacity-60 pointer-events-none' : ''}`}>
               {importing ? 'Importando...' : '📂 Selecionar arquivo'}
-              <input ref={fileInputRef} type="file" accept=".csv,.txt" className="hidden"
+              <input ref={fileInputRef} type="file" accept=".csv,.txt,.xlsx" className="hidden"
                 onChange={handleFileImport} disabled={importing} />
             </label>
             {importResult && (
