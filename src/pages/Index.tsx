@@ -12,7 +12,7 @@ export default function Index() {
   const [name, setName] = useState('')
   const [feedback, setFeedback] = useState<FeedbackState>({ type: null, message: '' })
   const [loading, setLoading] = useState(false)
-  const [contactLink, setContactLink] = useState('')
+  const [contactLink, setContactLinkState] = useState('')
 
   const [suggestions, setSuggestions] = useState<string[]>([])
   const [showSuggestions, setShowSuggestions] = useState(false)
@@ -21,14 +21,35 @@ export default function Index() {
   const containerRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    setContactLink(getContactLink())
+    let mounted = true
+    ;(async () => {
+      try {
+        const link = await getContactLink()
+        if (mounted) setContactLinkState(link)
+      } catch {
+        // ignore and keep empty
+      }
+    })()
+    return () => { mounted = false }
   }, [])
 
   useEffect(() => {
-    const results = searchGuests(name)
-    setSuggestions(results)
-    setShowSuggestions(results.length > 0 && name.trim().length > 0)
-    setActiveIndex(-1)
+    let cancelled = false
+
+    if (!name.trim()) {
+      setSuggestions([])
+      setShowSuggestions(false)
+      return
+    }
+
+    searchGuests(name).then(results => {
+      if (cancelled) return
+      setSuggestions(results)
+      setShowSuggestions(results.length > 0)
+      setActiveIndex(-1)
+    })
+
+    return () => { cancelled = true }
   }, [name])
 
   useEffect(() => {
@@ -77,7 +98,7 @@ export default function Index() {
     if (e.key === 'Enter') handleConfirm()
   }
 
-  function handleConfirm() {
+  async function handleConfirm() {
     if (!name.trim()) {
       setFeedback({ type: 'error', message: 'Por favor, digite seu nome.' })
       return
@@ -85,8 +106,10 @@ export default function Index() {
 
     setShowSuggestions(false)
     setLoading(true)
-    setTimeout(() => {
-      const result: RSVPResult = confirmRSVP(name)
+
+    try {
+      const result: RSVPResult = await confirmRSVP(name)
+
       if (result === 'confirmed') {
         setFeedback({
           type: 'success',
@@ -104,8 +127,14 @@ export default function Index() {
           message: 'Nome não encontrado na lista de convidados. Verifique seu nome ou entre em contato com os noivos.',
         })
       }
+    } catch {
+      setFeedback({
+        type: 'error',
+        message: 'Erro de conexão. Verifique sua internet e tente novamente.',
+      })
+    } finally {
       setLoading(false)
-    }, 600)
+    }
   }
 
   const feedbackClasses: Record<string, string> = {
@@ -116,7 +145,7 @@ export default function Index() {
 
   return (
     <div className="min-h-screen bg-cream flex flex-col">
-      {/* Hero Section */}
+      {/* Hero */}
       <section className="relative w-full overflow-hidden">
         <div className="relative h-[480px] sm:h-[560px]">
           <img
@@ -128,18 +157,10 @@ export default function Index() {
         </div>
 
         <div className="relative -mt-32 pb-8 text-center px-4 fade-in-up">
-          <img
-            src="/monogram.png"
-            alt="EL"
-            className="w-24 h-24 mx-auto mb-2 drop-shadow-md"
-          />
-          <h1 className="font-script text-7xl sm:text-8xl text-olive-800 leading-none drop-shadow-sm">
-            Eliel
-          </h1>
+          <img src="/monogram.png" alt="EL" className="w-24 h-24 mx-auto mb-2 drop-shadow-md" />
+          <h1 className="font-script text-7xl sm:text-8xl text-olive-800 leading-none drop-shadow-sm">Eliel</h1>
           <p className="font-script text-5xl sm:text-6xl text-olive-600 -mt-2">&amp;</p>
-          <h1 className="font-script text-7xl sm:text-8xl text-olive-800 leading-none -mt-2 drop-shadow-sm">
-            Larissa
-          </h1>
+          <h1 className="font-script text-7xl sm:text-8xl text-olive-800 leading-none -mt-2 drop-shadow-sm">Larissa</h1>
         </div>
       </section>
 
@@ -150,7 +171,6 @@ export default function Index() {
           convidamos você para a celebração<br />
           do nosso casamento.
         </p>
-
         <div className="flex items-center justify-center gap-4 mt-6">
           <div className="h-px w-12 bg-olive-300" />
           <div className="flex items-baseline gap-2 sm:gap-3">
@@ -162,10 +182,9 @@ export default function Index() {
         </div>
       </section>
 
-      {/* Ornament */}
       <div className="text-center text-olive-300 text-2xl py-2 select-none">❧</div>
 
-      {/* RSVP Section */}
+      {/* RSVP */}
       <section className="flex-1 px-4 pb-10">
         <div className="max-w-md mx-auto">
           <div className="card fade-in-up delay-300">
@@ -176,7 +195,6 @@ export default function Index() {
               Digite seu nome exatamente como foi convidado
             </p>
 
-            {/* Input with autocomplete */}
             <div ref={containerRef} className="relative mb-4">
               <input
                 type="text"
@@ -204,9 +222,7 @@ export default function Index() {
                           : 'text-stone-700 hover:bg-olive-50'
                       } ${i < suggestions.length - 1 ? 'border-b border-olive-50' : ''}`}
                     >
-                      <span className={`text-xs ${i === activeIndex ? 'text-olive-200' : 'text-olive-400'}`}>
-                        ✦
-                      </span>
+                      <span className={`text-xs ${i === activeIndex ? 'text-olive-200' : 'text-olive-400'}`}>✦</span>
                       {s}
                     </li>
                   ))}
@@ -229,7 +245,6 @@ export default function Index() {
             </button>
           </div>
 
-          {/* Quick links */}
           <div className={`grid gap-3 mt-6 fade-in-up delay-400 ${contactLink ? 'grid-cols-2' : 'grid-cols-1'}`}>
             <a
               href={INVITE_URL}

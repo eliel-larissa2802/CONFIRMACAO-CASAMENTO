@@ -1,93 +1,8 @@
-const GUESTS_KEY = 'wedding_guests'
-const CONFIRMED_KEY = 'wedding_confirmed'
-const CONTACT_KEY = 'contact_link'
+import { supabase, type GuestRow } from './supabase'
 
-export function getGuests(): string[] {
-  const raw = localStorage.getItem(GUESTS_KEY)
-  return raw ? JSON.parse(raw) : []
-}
-
-export function setGuests(guests: string[]): void {
-  localStorage.setItem(GUESTS_KEY, JSON.stringify(guests))
-}
-
-export function getConfirmed(): string[] {
-  const raw = localStorage.getItem(CONFIRMED_KEY)
-  return raw ? JSON.parse(raw) : []
-}
-
-export function setConfirmed(confirmed: string[]): void {
-  localStorage.setItem(CONFIRMED_KEY, JSON.stringify(confirmed))
-}
-
-export function normalize(name: string): string {
-  return name.trim().toLowerCase()
-}
+export type { GuestRow }
 
 export type RSVPResult = 'confirmed' | 'already_confirmed' | 'not_found'
-
-export function confirmRSVP(name: string): RSVPResult {
-  const norm = normalize(name)
-  const guests = getGuests()
-  const confirmed = getConfirmed()
-
-  const guestNorms = guests.map(normalize)
-  const confirmedNorms = confirmed.map(normalize)
-
-  if (!guestNorms.includes(norm)) return 'not_found'
-  if (confirmedNorms.includes(norm)) return 'already_confirmed'
-
-  confirmed.push(name.trim())
-  setConfirmed(confirmed)
-  return 'confirmed'
-}
-
-export function addGuest(name: string): boolean {
-  const norm = normalize(name)
-  const guests = getGuests()
-  if (guests.map(normalize).includes(norm)) return false
-  guests.push(name.trim())
-  setGuests(guests)
-  return true
-}
-
-export function editGuest(oldName: string, newName: string): boolean {
-  const normOld = normalize(oldName)
-  const normNew = normalize(newName)
-  const guests = getGuests()
-  const confirmed = getConfirmed()
-  const guestNorms = guests.map(normalize)
-
-  if (normOld !== normNew && guestNorms.includes(normNew)) return false
-
-  const idx = guestNorms.indexOf(normOld)
-  if (idx === -1) return false
-
-  guests[idx] = newName.trim()
-  setGuests(guests)
-
-  const confirmIdx = confirmed.map(normalize).indexOf(normOld)
-  if (confirmIdx !== -1) {
-    confirmed[confirmIdx] = newName.trim()
-    setConfirmed(confirmed)
-  }
-
-  return true
-}
-
-export function removeGuest(name: string): void {
-  const norm = normalize(name)
-  setGuests(getGuests().filter(g => normalize(g) !== norm))
-  setConfirmed(getConfirmed().filter(g => normalize(g) !== norm))
-}
-
-export function getContactLink(): string {
-  return localStorage.getItem(CONTACT_KEY) ?? ''
-}
-
-export function setContactLink(url: string): void {
-  localStorage.setItem(CONTACT_KEY, url.trim())
-}
 
 export type ImportResult = {
   total: number
@@ -95,22 +10,114 @@ export type ImportResult = {
   duplicates: number
 }
 
-export function searchGuests(query: string, limit = 5): string[] {
-  const q = normalize(query)
-  if (!q) return []
-  return getGuests()
-    .filter(g => normalize(g).startsWith(q))
-    .slice(0, limit)
+const CONTACT_KEY = 'contact_link'
+
+export function normalize(name: string): string {
+  return name.trim().toLowerCase()
 }
 
-export function importGuests(raw: string): ImportResult {
-  const lines = raw.split(/\r?\n/)
-  const guests = getGuests()
-  const existingNorms = new Set(guests.map(normalize))
+export async function getGuests(): Promise<GuestRow[]> {
+  const { data, error } = await supabase
+    .from('guests')
+    .select('*')
+    .order('name', { ascending: true })
+  if (error) throw new Error(error.message)
+  return data ?? []
+}
 
-  let added = 0
-  let duplicates = 0
+export async function confirmRSVP(name: string): Promise<RSVPResult> {
+  const { data, error } = await supabase
+    .from('guests')
+    .select('*')
+    .ilike('name', name.trim())
+
+  if (error) throw new Error(error.message)
+  if (!data || data.length === 0) return 'not_found'
+
+  const guest: GuestRow = data[0]
+  if (guest.confirmed) return 'already_confirmed'
+
+  const { error: updateError } = await supabase
+    .from('guests')
+    .update({ confirmed: true })
+    .eq('id', guest.id)
+
+  if (updateError) throw new Error(updateError.message)
+  return 'confirmed'
+}
+
+export async function addGuest(name: string): Promise<boolean> {
+  const { data } = await supabase
+    .from('guests')
+    .select('id')
+    .ilike('name', name.trim())
+
+  if (data && data.length > 0) return false
+
+  const { error } = await supabase
+    .from('guests')
+    .insert({ name: name.trim(), confirmed: false })
+
+  if (error) throw new Error(error.message)
+  return true
+}
+
+export async function editGuest(oldName: string, newName: string): Promise<boolean> {
+  const { data: oldData } = await supabase
+    .from('guests')
+    .select('*')
+    .ilike('name', oldName.trim())
+
+  if (!oldData || oldData.length === 0) return false
+
+  if (normalize(oldName) !== normalize(newName)) {
+    const { data: existing } = await supabase
+      .from('guests')
+      .select('id')
+      .ilike('name', newName.trim())
+    if (existing && existing.length > 0) return false
+  }
+
+  const { error } = await supabase
+    .from('guests')
+    .update({ name: newName.trim() })
+    .eq('id', oldData[0].id)
+
+  if (error) throw new Error(error.message)
+  return true
+}
+
+export async function removeGuest(id: string): Promise<void> {
+  const { error } = await supabase
+    .from('guests')
+    .delete()
+    .eq('id', id)
+  if (error) throw new Error(error.message)
+}
+
+export async function searchGuests(query: string, limit = 5): Promise<string[]> {
+  const q = query.trim()
+  if (!q) return []
+
+  const { data, error } = await supabase
+    .from('guests')
+    .select('name')
+    .ilike('name', `${q}%`)
+    .limit(limit)
+
+  if (error) return []
+  return (data ?? []).map(r => r.name)
+}
+
+export async function importGuests(raw: string): Promise<ImportResult> {
+  const lines = raw.split(/\r?\n/)
+
+  const { data: existing } = await supabase.from('guests').select('name')
+  const existingNorms = new Set((existing ?? []).map(r => normalize(r.name)))
+
+  const toInsert: string[] = []
   let total = 0
+  let duplicates = 0
 
   for (const line of lines) {
     const name = line.trim()
@@ -120,12 +127,47 @@ export function importGuests(raw: string): ImportResult {
     if (existingNorms.has(norm)) {
       duplicates++
     } else {
-      guests.push(name)
+      toInsert.push(name)
       existingNorms.add(norm)
-      added++
     }
   }
 
-  if (added > 0) setGuests(guests)
-  return { total, added, duplicates }
+  if (toInsert.length > 0) {
+    const rows = toInsert.map(name => ({ name, confirmed: false }))
+    const { error } = await supabase.from('guests').insert(rows)
+    if (error) throw new Error(error.message)
+  }
+
+  return { total, added: toInsert.length, duplicates }
+}
+
+// Contact link persistence moved to Supabase table `settings`.
+// Expected table schema (SQL example to run in Supabase):
+// create table settings (key text primary key, value text);
+
+export async function getContactLink(): Promise<string> {
+  try {
+    const { data, error } = await supabase.from('settings').select('value').eq('key', CONTACT_KEY).limit(1).single()
+    if (error) {
+      // if table doesn't exist or other error, propagate empty string instead of throwing to avoid breaking UI
+      console.warn('getContactLink supabase error:', error.message)
+      return ''
+    }
+    return (data?.value as string) ?? ''
+  } catch (err) {
+    console.warn('getContactLink catch', err)
+    return ''
+  }
+}
+
+export async function setContactLink(url: string): Promise<void> {
+  const trimmed = url.trim()
+  try {
+    // upsert into settings (key, value)
+    const { error } = await supabase.from('settings').upsert({ key: CONTACT_KEY, value: trimmed }, { onConflict: 'key' })
+    if (error) throw new Error(error.message)
+  } catch (err) {
+    console.warn('setContactLink error', err)
+    throw err
+  }
 }
